@@ -21,7 +21,9 @@ CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 # ======================== НАСТРОЙКИ ========================
 BOT_TOKEN = "8675981214:AAGvxRzKGl9LDwk8h-6i31WO2KqPmH0GhtM"
-CHANNEL_USERNAME = "@coppers_shop"
+CHANNEL_USERNAME = "@copperS_shop"
+CHANNEL_LINK = "https://t.me/copperS_shop"
+GGSEL_LINK = "https://ggsel.net/sellers/132805517"
 ADMIN_IDS = [7079908197, 6797520714]
 
 INSTRUCTION_TEXT = (
@@ -33,7 +35,8 @@ INSTRUCTION_TEXT = (
     "5️⃣ Введи полученный ключ в пустое поле.\n"
     "6️⃣ Нажми <b>«Далее»</b> и следуй инструкциям.\n\n"
     "🎮 После активации игра появится в библиотеке!\n\n"
-    "💡 Если ключ не подходит — напиши в канал @growagarden_arferno"
+    f"💎 Наш магазин: <a href=\"{GGSEL_LINK}\">ggsel.net</a>\n\n"
+    "💡 Если ключ не подходит — напиши в канал @copperS_shop"
 )
 # ==========================================================
 
@@ -142,14 +145,15 @@ def get_keys_count() -> int:
 # ======================== КЛАВИАТУРЫ ========================
 def get_channel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Перейти в канал", url="https://t.me/growagarden_arferno")],
+        [InlineKeyboardButton(text="📢 Перейти в канал", url=CHANNEL_LINK)],
         [InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_sub")]
     ])
 
 
 def get_main_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Наш канал", url="https://t.me/growagarden_arferno")]
+        [InlineKeyboardButton(text="📢 Наш канал", url=CHANNEL_LINK)],
+        [InlineKeyboardButton(text="💎 Наш магазин", url=GGSEL_LINK)]
     ])
 
 
@@ -166,7 +170,7 @@ async def check_subscription(user_id: int) -> bool:
         return False
 
 
-# ======================== ОБРАБОТЧИКИ (ВСЕ КОНКРЕТНЫЕ ПЕРВЫМ) ========================
+# ======================== ОБРАБОТЧИКИ ========================
 
 # --- /start ---
 @router.message(CommandStart())
@@ -175,13 +179,14 @@ async def cmd_start(message: Message):
     logger.info(f"👋 /start от {uid} ({message.from_user.first_name})")
 
     count = get_keys_count()
+
     if count == 0:
         await message.answer(
             "👋 <b>Приветствуем!</b>\n\n"
             "😔 Бесплатные ключи на данный момент <b>закончились</b>. "
             "Следите за обновлениями!\n\n"
-            "📢 Подпишитесь:\n"
-            f"🔗 <a href=\"https://t.me/growagarden_arferno\">growagarden_arferno</a>",
+            f"📢 Подпишитесь: <a href=\"{CHANNEL_LINK}\">copperS_shop</a>\n"
+            f"💎 Магазин: <a href=\"{GGSEL_LINK}\">ggsel.net</a>",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
         )
@@ -202,7 +207,7 @@ async def cmd_start(message: Message):
         await message.answer(
             "👋 <b>Приветствуем вас!</b>\n\n"
             "🎁 Для получения <b>бесплатного ключа</b> подпишитесь на канал:\n\n"
-            f"📢 <a href=\"https://t.me/growagarden_arferno\">growagarden_arferno</a>\n\n"
+            f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>\n\n"
             "✅ После подписки нажмите кнопку <b>«Проверить подписку»</b> 👇",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
@@ -246,7 +251,7 @@ async def check_sub_callback(callback: CallbackQuery):
     if not is_subscribed:
         await callback.message.edit_text(
             "❌ <b>Подписка не обнаружена!</b>\n\n"
-            f"📢 Подпишитесь: <a href=\"https://t.me/growagarden_arferno\">growagarden_arferno</a>\n"
+            f"📢 Подпишитесь: <a href=\"{CHANNEL_LINK}\">copperS_shop</a>\n"
             "Затем нажмите <b>«Проверить подписку»</b> ещё раз.",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
@@ -354,7 +359,7 @@ async def cmd_set_channel(message: Message):
     await message.answer(f"✅ Канал: <code>{CHANNEL_USERNAME}</code>")
 
 
-# --- Catch-all: ПОСЛЕДНИМ (чтобы не перехватывал конкретные команды) ---
+# --- Catch-all: ПОСЛЕДНИМ ---
 @router.message()
 async def catch_all_message(message: Message):
     logger.info(f"📩 Необработанное: {message.from_user.id}: {message.text}")
