@@ -22,7 +22,7 @@ DATABASE_FILE = os.path.join(BASE_DIR, "users.db")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 # ======================== НАСТРОЙКИ ========================
-BOT_TOKEN = "8675981214:AAHkjjcFAhSTisGVF15O7MR3Be7hUhVyasg"
+BOT_TOKEN = "8601852006:AAFZEsIP6WgbfwDbbW4LShK7oytq6E8neOY"
 ADMIN_IDS = [7079908197, 6797520714]
 # ==========================================================
 
