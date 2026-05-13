@@ -20,7 +20,7 @@ DATABASE_FILE = os.path.join(BASE_DIR, "users.db")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 # ======================== НАСТРОЙКИ ========================
-BOT_TOKEN = ""
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "СТАРЫЙ_ТОКЕН_НА_СЛУЧАЙ")
 CHANNEL_USERNAME = "@copperS_shop"
 CHANNEL_LINK = "https://t.me/copperS_shop"
 GGSEL_LINK = "https://ggsel.net/sellers/132805517"
