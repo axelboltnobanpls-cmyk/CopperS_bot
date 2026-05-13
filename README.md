@@ -11,6 +11,7 @@
 CopperS_bot/
 ├── bot.py              — основной файл бота
 ├── maintenance.py      — режим технического обслуживания
+├── admin_panel.py      — админ-панель (отдельный скрипт)
 ├── keys.json           — база ключей (загружаете сюда свои)
 ├── users.db            — база данных пользователей (создаётся автоматически)
 ├── config.json         — конфигурация (сохраняет канал)
@@ -70,7 +71,7 @@ ADMIN_IDS = [123456789]                       # Ваш Telegram ID (число)
 Нажмите `Win + R`, введите `cmd`, нажмите Enter.  
 Перейдите в папку бота:
 ```
-cd D:\CopperS_bot
+cd ...\CopperS_bot
 ```
 
 ### 3.2 Установите зависимости
@@ -86,8 +87,8 @@ python bot.py
 Вы увидите в консоли:
 ```
 🚀 Бот запущен!
-📢 Канал: @copperS_shop
-🔑 Ключей: 0
+📢 Канал для проверки: @copperS_shop
+🔑 Ключей в базе: 3 
 ```
 
 ⚠️ **Окно терминала не закрывайте!** Это работающий бот.
@@ -96,28 +97,27 @@ python bot.py
 
 ## 📦 Шаг 4: Загрузка ключей
 
-### Через Telegram (команда админа):
-```
-/addkey
-ABCD-1234-EFGH
-IJKL-5678-MNOP
-```
-Бот добавит ключи в базу и покажет сколько теперь доступно.
+### 4.1 Через файл `keys.json`
+Откройте файл `keys.json` и запишите свои ключи, каждый в кавычках, через запятую:
 
-### Через файл `keys.json`:
 ```json
 {
   "keys": [
-    "XXXX-XXXX-XXXX",
-    "YYYY-YYYY-YYYY"
+    "ABCD-1234-EFGH-5678",
+    "IJKL-9012-MNOP-3456",
+    "QRST-7890-UVWX-1234"
   ]
 }
 ```
 
-### Проверить остаток:
+### 4.2 Через Telegram (команда админа)
+Отправьте боту в личку:
 ```
-/stats
+/addkey
+XXXXX-XXXXX-XXXXX
+YYYYY-YYYYY-YYYYY
 ```
+Бот добавит ключи в базу и покажет сколько теперь доступно.
 
 ### Как работает система ключей:
 - Ключи хранятся в файле `keys.json` (порядок — очередь FIFO)
@@ -178,21 +178,26 @@ Railway — платформа для деплоя проектов. Есть **
 ### Шаг 1: Создайте аккаунт на Railway
 1. Перейдите на https://railway.app
 2. Нажмите **«Login»** → выберите **«Continue with GitHub»**
-3. Авторизуйтесь через GitHub (если нет аккаунта — создайте на https://github.com)
+3. Авторизуйтесь через GitHub (если нет аккаунта — создайте бесплатный на https://github.com)
 4. Разрешите Railway доступ к вашему GitHub
 
+---
+
 ### Шаг 2: Загрузите проект на GitHub
-1. Перейдите на https://github.com/new
+1. Перейдите на https://github.com/new (создайте новый репозиторий)
 2. Введите имя: `copper-keys-bot`
 3. Поставьте галочку **Public**
 4. Нажмите **«Create repository»**
 5. На следующей странице выберите **«uploading an existing file»**
-6. Перетащите все файлы из папки бота:
+6. Перетащите в область загрузки **все файлы** из папки бота:
    - `bot.py`
    - `maintenance.py`
+   - `admin_panel.py`
    - `keys.json`
    - `requirements.txt`
 7. Нажмите **«Commit changes»**
+
+---
 
 ### Шаг 3: Создайте проект на Railway
 1. Перейдите на https://railway.app
@@ -201,18 +206,25 @@ Railway — платформа для деплоя проектов. Есть **
 4. Найдите и выберите репозиторий `copper-keys-bot`
 5. Railway автоматически определит Python-проект
 
+---
+
 ### Шаг 4: Настройте переменные окружения
-1. В Railway → **Settings → Variables**
-2. Добавьте переменную:
+1. В Railway нажмите на свой проект
+2. Перейдите в **Settings → Variables**
+3. Добавьте переменные:
 
 | Имя | Значение |
 |-----|----------|
-| `BOT_TOKEN` | `ваш_токен_от_BotFather` |
+| `BOT_TOKEN` | `токен основного бота от BotFather` |
+| `ADMIN_TOKEN` | `токен админ-бота от BotFather` |
 
-⚠️ **Не** добавляйте `BOT_TOKEN` прямо в код — Telegram заблокирует токен если он попадёт в публичный репозиторий!
+⚠️ **Не** добавляйте токены прямо в код — Telegram заблокирует токен если он попадёт в публичный репозиторий!
+
+---
 
 ### Шаг 5: Дополните код для Railway
-В файлах `bot.py` и `maintenance.py` замените строку токена:
+
+В файлах `bot.py`, `maintenance.py` и `admin_panel.py` замените строку токена:
 ```python
 BOT_TOKEN = "8675981214:AAGvxRzKGl9LDwk8h-..."
 ```
@@ -220,43 +232,99 @@ BOT_TOKEN = "8675981214:AAGvxRzKGl9LDwk8h-..."
 ```python
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "СТАРЫЙ_ТОКЕН_НА_СЛУЧАЙ")
 ```
-(`import os` вверху уже есть ✅)
 
-**Закоммитьте и запушьте:**
+В `admin_panel.py` замените на:
+```python
+BOT_TOKEN = os.environ.get("ADMIN_TOKEN", "СТАРЫЙ_ТОКЕН_НА_СЛУЧАЙ")
+```
+
+(И `import os` вверху уже есть ✅)
+
+**Закоммитьте изменения и запушьте на GitHub:**
 ```bash
 git add .
-git commit -m "Railway support"
+git commit -m "Добавлена поддержка Railway"
 git push
 ```
 
-### Шаг 6: Деплой `bot.py`
-1. Railway → **Settings** → **Start Command**: `python bot.py`
-2. Нажмите **Redeploy**
+Бот **автоматически перезапустится** на Railway!
 
-### Шаг 7: Деплой `maintenance.py` (режим обслуживания)
+---
 
-**Способ 1 — Смена Start Command:**
-1. Railway → **Settings** → **Start Command**
-2. Замените на: `python maintenance.py`
+### Шаг 6: Деплой основного бота на Railway
+
+1. В Railway → **Settings** → **Start Command**
+2. Убедитесь что стоит: `python bot.py`
 3. Нажмите **Redeploy**
 
-**Способ 2 — Отдельный сервис:**
-1. Railway → **New Service** → тот же репозиторий
-2. **Start Command**: `python maintenance.py`
-3. Нажмите **Deploy**
+Это ваш **главный сервис** — он работает с пользователями.
 
-Теперь у вас **два сервиса**: один с `bot.py`, другой с `maintenance.py`. Переключайтесь, останавливая один и запуская другой.
+---
 
-### Шаг 8: Управление
+### Шаг 7: Добавление админ-панели как второго сервиса на Railway
+
+1. В Railway → **New Service**
+2. Выберите **тот же репозиторий** `copper-keys-bot`
+3. В **Start Command** укажите: `python admin_panel.py`
+4. В **Settings → Variables** этого сервиса добавьте:
+
+| Имя | Значение |
+|-----|----------|
+| `ADMIN_TOKEN` | `токен админ-бота от BotFather` |
+
+5. Нажмите **Deploy**
+
+Теперь у вас **два сервиса** в Railway:
+
+| Сервис | Команда | Что делает |
+|--------|---------|------------|
+| `copper-main` | `python bot.py` | Работает с пользователями |
+| `copper-admin` | `python admin_panel.py` | Админ-панель для вас |
+
+---
+
+### Шаг 8: Как управлять сервисами
 
 | Действие | Как сделать |
 |----------|-------------|
-| **Остановить бота** | Railway → сервис → **Stop** |
-| **Запустить бота** | Railway → сервис → **Start** |
-| **Перезапустить** | Railway → **Redeploy** |
-| **Режим обслуживания** | Смените Start Command на `python maintenance.py` → Redeploy |
-| **Вернуть бота** | Start Command → `python bot.py` → Redeploy |
-| **Обновить код** | `git push` → авто-деплой |
+| **Остановить основного бота** | Railway → сервис `copper-main` → **Stop** |
+| **Запустить основного бота** | Railway → сервис `copper-main` → **Start** |
+| **Перезапустить бота** | Railway → **Redeploy** |
+| **Переключить на maintenance** | В `copper-main` смените Start Command на `python maintenance.py` → Redeploy |
+| **Вернуть бота обратно** | Start Command → `python bot.py` → Redeploy |
+| **Открыть админ-панель** | Напишите `/admin` админ-боту в Telegram |
+| **Обновить код** | `git push` → оба сервиса обновятся автоматически |
+
+---
+
+### Альтернатива: Деплой main + admin одним сервисом
+
+Если не хотите создавать два сервиса, можно запустить оба бота одним скриптом. Создайте файл `run_all.py`:
+
+```python
+import asyncio
+
+from bot import bot as main_bot, dp as main_dp
+from admin_panel import bot as admin_bot, dp as admin_dp
+
+async def main():
+    print("🚀 Запуск основного бота...")
+    print("🔐 Запуск админ-панели...")
+    await asyncio.gather(
+        main_dp.start_polling(main_bot),
+        admin_dp.start_polling(admin_bot),
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Тогда в **Start Command** на Railway укажите:
+```
+python run_all.py
+```
+
+Оба бота запустятся в одном сервисе. Но **минус**: если упадёт один — упадут оба.
 
 ---
 
@@ -264,8 +332,10 @@ git push
 
 | Команда | Описание |
 |---------|----------|
-| `/addkey` | Добавить ключи (только админ) |
-| `/delkey` | Удалить конкретный ключ |
+| `/start` | Получить ключ (основной бот) |
+| `/admin` | Войти в админ-панель (админ-бот) |
+| `/addkey` | Добавить ключи |
+| `/delkey` | Удалить ключ |
 | `/listkeys` | Показать все ключи |
 | `/stats` | Статистика |
 | `/setchannel` | Сменить канал для проверки |
@@ -277,6 +347,8 @@ git push
 ## ⚡ Дополнительно
 
 ### Как добавить фото к инструкции
+Чтобы отправить фото с текстом, замените блок с ключом на:
+
 ```python
 await bot.send_photo(
     chat_id=callback.from_user.id,
@@ -284,6 +356,7 @@ await bot.send_photo(
     caption=f"🎉 Вот ваш ключ:\n<code>{key}</code>\n\n📖 Инструкция:\n..."
 )
 ```
+
 Поместите файл `screenshot.png` рядом с `bot.py`.
 
 ### Файл `users.db`
