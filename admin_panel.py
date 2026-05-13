@@ -7,12 +7,12 @@ from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 )
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
-from aiogram.filters import StateFilter
+from aiogram.fsm.state import StatesGroup, State
 
 # ======================== ПУТИ ========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -154,10 +154,10 @@ def export_users_to_text() -> str:
 
 
 # ======================== СОСТОЯНИЯ FSM ========================
-class AdminStates:
-    waiting_add_keys = "waiting_add_keys"
-    waiting_del_key = "waiting_del_key"
-    waiting_broadcast = "waiting_broadcast"
+class AdminStates(StatesGroup):
+    waiting_add_keys = State()
+    waiting_del_key = State()
+    waiting_broadcast = State()
 
 
 # ======================== ГЛАВНОЕ МЕНЮ ========================
@@ -221,7 +221,7 @@ async def admin_add_keys_start(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.message(AdminStates.waiting_add_keys)
+@router.message(StateFilter(AdminStates.waiting_add_keys))
 async def admin_add_keys_process(message: Message, state: FSMContext):
     text = message.text.strip()
     if not text:
@@ -262,7 +262,7 @@ async def admin_del_key_start(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.message(AdminStates.waiting_del_key)
+@router.message(StateFilter(AdminStates.waiting_del_key))
 async def admin_del_key_process(message: Message, state: FSMContext):
     key_to_del = message.text.strip()
     keys = load_keys()
@@ -385,7 +385,7 @@ async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.message(AdminStates.waiting_broadcast)
+@router.message(StateFilter(AdminStates.waiting_broadcast))
 async def admin_broadcast_process(message: Message, state: FSMContext):
     text = message.text.strip()
     if not text:
