@@ -13,7 +13,6 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
-from aiogram import FSMContext
 
 # ======================== ПУТИ ========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +21,7 @@ DATABASE_FILE = os.path.join(BASE_DIR, "users.db")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 # ======================== НАСТРОЙКИ ========================
-BOT_TOKEN = os.environ.get("ADMIN_TOKEN", "8601852006:AAFZEsIP6WgbfwDbbW4LShK7oytq6E8neOY")
+BOT_TOKEN = "8601852006:AAFZEsIP6WgbfwDbbW4LShK7oytq6E8neOY"
 ADMIN_IDS = [7079908197, 6797520714]
 # ==========================================================
 
