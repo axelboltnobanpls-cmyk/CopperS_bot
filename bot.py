@@ -20,7 +20,7 @@ DATABASE_FILE = os.path.join(BASE_DIR, "users.db")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 # ======================== НАСТРОЙКИ ========================
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8675981214:AAGvxRzKGl9LDwk8h-6i31WO2KqPmH0GhtM")
+BOT_TOKEN = ""
 CHANNEL_USERNAME = "@copperS_shop"
 CHANNEL_LINK = "https://t.me/copperS_shop"
 GGSEL_LINK = "https://ggsel.net/sellers/132805517"
@@ -28,15 +28,15 @@ ADMIN_IDS = [7079908197, 6797520714]
 
 INSTRUCTION_TEXT = (
     "📖 <b>Инструкция по активации ключа в Steam:</b>\n\n"
-    "1️⃣ Открой клиент <b>Steam</b> и войди в свой аккаунт.\n"
-    "2️⃣ Нажми на <b>имя профиля</b> в правом верхнем углу.\n"
-    "3️⃣ Выбери <b>«Активация продукта»</b>.\n"
-    "4️⃣ Нажми <b>«Далее»</b>, поставь галочку → <b>«Я согласен»</b>.\n"
-    "5️⃣ Введи полученный ключ в пустое поле.\n"
-    "6️⃣ Нажми <b>«Далее»</b> и следуй инструкциям.\n\n"
-    "🎮 После активации игра появится в библиотеке!\n\n"
+    "1️⃣ Откройте клиент <b>Steam</b> и войдите в свой аккаунт.\n"
+    "2️⃣ Нажмите на <b>имя вашего профиля</b> в правом верхнем углу.\n"
+    "3️⃣ Выберите <b>«Активация продукта»</b>.\n"
+    "4️⃣ Нажмите <b>«Далее»</b>, поставьте галочку → <b>«Я согласен»</b>.\n"
+    "5️⃣ Введите полученный ключ в пустое поле.\n"
+    "6️⃣ Нажмите <b>«Далее»</b> и следуйте инструкциям на экране.\n\n"
+    "🎮 После активации игра появится в вашей библиотеке!\n\n"
     f"💎 Наш магазин: <a href=\"{GGSEL_LINK}\">ggsel.net</a>\n\n"
-    "💡 Если ключ не подходит — напиши в канал @copperS_shop"
+    "💡 Если у вас возникнут вопросы — напишите нам в канал @copperS_shop"
 )
 # ==========================================================
 
@@ -172,21 +172,21 @@ async def check_subscription(user_id: int) -> bool:
 
 # ======================== ОБРАБОТЧИКИ ========================
 
-# --- /start ---
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     uid = message.from_user.id
-    logger.info(f"👋 /start от {uid} ({message.from_user.first_name})")
+    first = message.from_user.first_name or "Друг"
+    logger.info(f"👋 /start от {uid} ({first})")
 
     count = get_keys_count()
 
     if count == 0:
         await message.answer(
-            "👋 <b>Приветствуем!</b>\n\n"
-            "😔 Бесплатные ключи на данный момент <b>закончились</b>. "
-            "Следите за обновлениями!\n\n"
-            f"📢 Подпишитесь: <a href=\"{CHANNEL_LINK}\">copperS_shop</a>\n"
-            f"💎 Магазин: <a href=\"{GGSEL_LINK}\">ggsel.net</a>",
+            f"👋 <b>Здравствуйте, {first}!</b>\n\n"
+            "😔 К сожалению, в данный момент все ключи временно разобраны.\n"
+            "Не переживайте — мы уже работаем над пополнением!\n\n"
+            "💛 Советуем подписаться на канал, чтобы не пропустить обновления:\n\n"
+            f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
         )
@@ -194,9 +194,10 @@ async def cmd_start(message: Message):
 
     if user_exists(uid):
         await message.answer(
-            "🔒 <b>Упс!</b>\n\n"
-            "Вы уже получали ключ. Акция — <b>один раз</b> на человека. "
-            "Пригласите друзей 😉",
+            f"👋 <b>С возвращением, {first}!</b>\n\n"
+            "Вы уже получали ключ в рамках данной акции — "
+            "к сожалению, повторная выдача не предусмотрена.\n\n"
+            "💛 Порекомендуйте бота друзьям — возможно, им повезёт! 😉",
             reply_markup=get_main_keyboard()
         )
         return
@@ -205,10 +206,11 @@ async def cmd_start(message: Message):
 
     if not is_subscribed:
         await message.answer(
-            "👋 <b>Приветствуем вас!</b>\n\n"
-            "🎁 Для получения <b>бесплатного ключа</b> подпишитесь на канал:\n\n"
+            f"👋 <b>Здравствуйте, {first}!</b>\n\n"
+            "🎁 Мы будем рады подарить вам бесплатный ключ!\n"
+            "Для этого подпишитесь на наш канал:\n\n"
             f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>\n\n"
-            "✅ После подписки нажмите кнопку <b>«Проверить подписку»</b> 👇",
+            "После подписки нажмите кнопку <b>«Проверить подписку»</b> 👇",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
         )
@@ -218,31 +220,43 @@ async def cmd_start(message: Message):
             save_user(
                 user_id=uid,
                 username=message.from_user.username or "N/A",
-                first_name=message.from_user.first_name or "N/A",
+                first_name=first,
                 key=key
             )
             await message.answer(
-                "🎉 <b>Поздравляем!</b>\n\n"
-                f"Вот ваш ключ:\n<code>{key}</code>\n\n"
+                f"🎉 <b>Поздравляем, {first}!</b>\n\n"
+                f"Вот ваш персональный ключ:\n<code>{key}</code>\n\n"
                 f"📖 <b>Инструкция по активации:</b>\n\n{INSTRUCTION_TEXT}\n\n"
-                "🔒 Ключ одноразовый. Удачи! 🚀",
+                "🔒 Обратите внимание: ключ одноразовый и привязан только к вам.\n"
+                "Приятной игры! 🎮",
                 reply_markup=get_main_keyboard()
             )
         else:
-            await message.answer("😔 Ключи закончились!")
+            await message.answer(
+                f"👋 <b>{first}</b>, к сожалению, ключи на данный момент "
+                "закончились.\n\n"
+                "Мы уже работаем над этим — загляните в канал, чтобы узнать "
+                "о новых партиях первым:\n\n"
+                f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>",
+                reply_markup=get_channel_keyboard(),
+                disable_web_page_preview=True
+            )
 
 
-# --- Callback: Проверить подписку ---
 @router.callback_query(F.data == "check_sub")
 async def check_sub_callback(callback: CallbackQuery):
     await callback.answer()
     uid = callback.from_user.id
+    first = callback.from_user.first_name or "Друг"
     logger.info(f"🔍 Проверка подписки: {uid}")
 
     if get_keys_count() == 0:
         await callback.message.edit_text(
-            "😔 Ключи <b>закончились</b>.",
-            reply_markup=None
+            f"👋 <b>{first}</b>, ключи на данный момент временно отсутствуют.\n\n"
+            "Мы уже работаем над пополнением — следите за обновлениями в канале!\n\n"
+            f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>",
+            reply_markup=None,
+            disable_web_page_preview=True
         )
         return
 
@@ -250,94 +264,125 @@ async def check_sub_callback(callback: CallbackQuery):
 
     if not is_subscribed:
         await callback.message.edit_text(
-            "❌ <b>Подписка не обнаружена!</b>\n\n"
-            f"📢 Подпишитесь: <a href=\"{CHANNEL_LINK}\">copperS_shop</a>\n"
-            "Затем нажмите <b>«Проверить подписку»</b> ещё раз.",
+            f"👋 <b>{first}</b>, к сожалению, мы пока не видим вашу подписку.\n\n"
+            f"📢 Пожалуйста, подпишитесь на канал "
+            f"<a href=\"{CHANNEL_LINK}\">copperS_shop</a>, "
+            "а затем нажмите кнопку <b>«Проверить подписку»</b> ещё раз.",
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
         )
     elif user_exists(uid):
-        await callback.message.edit_text("🔒 Уже получали ключ. Акция — один раз.")
+        await callback.message.edit_text(
+            f"👋 <b>{first}</b>, вы уже получали ключ в рамках данной акции.\n\n"
+            "Порекомендуйте бота друзьям — возможно, им тоже повезёт! 😊"
+        )
     else:
         key = get_next_key()
         if key:
             save_user(
                 user_id=uid,
                 username=callback.from_user.username or "N/A",
-                first_name=callback.from_user.first_name or "N/A",
+                first_name=first,
                 key=key
             )
             await callback.message.edit_text(
-                "🎉 <b>Поздравляем!</b>\n\n"
-                f"Вот ваш ключ:\n<code>{key}</code>\n\n"
+                f"🎉 <b>Поздравляем, {first}!</b>\n\n"
+                f"Вот ваш персональный ключ:\n<code>{key}</code>\n\n"
                 f"📖 <b>Инструкция по активации:</b>\n\n{INSTRUCTION_TEXT}\n\n"
-                "🔒 Ключ одноразовый. Удачи! 🚀",
+                "🔒 Ключ одноразовый и привязан только к вам.\n"
+                "Приятной игры! 🎮",
                 reply_markup=get_main_keyboard()
             )
         else:
-            await callback.message.edit_text("😔 Ключи закончились!")
+            await callback.message.edit_text(
+                f"👋 <b>{first}</b>, к сожалению, ключи закончились.\n"
+                "Мы уже работаем над этим — загляните в канал для обновлений!\n\n"
+                f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>",
+                reply_markup=get_main_keyboard(),
+                disable_web_page_preview=True
+            )
 
 
 # --- Админские команды ---
 @router.message(Command("addkey"))
 async def cmd_add_key(message: Message):
     if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ Нет прав.")
+        await message.answer("⛔ У вас нет доступа к этой команде.")
         return
+
     text = message.text.replace("/addkey", "").strip()
     if not text:
-        await message.answer("📝 <code>/addkey\nXXXX-XXXX-XXXX\nYYYY-YYYY-YYYY</code>")
+        await message.answer(
+            "📝 <b>Формат добавления ключей:</b>\n\n"
+            "<code>/addkey\nXXXX-XXXX-XXXX\nYYYY-YYYY-YYYY</code>\n\n"
+            "Каждый ключ с новой строки."
+        )
         return
+
     new_keys = [k.strip() for k in text.split("\n") if k.strip()]
+    if not new_keys:
+        await message.answer("❌ Не удалось распознать ключи.")
+        return
+
     existing = load_keys()
     existing.extend(new_keys)
     save_keys(existing)
-    await message.answer(f"✅ Добавлено <b>{len(new_keys)}</b> ключей.\nВсего: <b>{len(existing)}</b>")
+    await message.answer(
+        f"✅ <b>{len(new_keys)}</b> ключей успешно добавлено.\n"
+        f"📊 Всего в базе: <b>{len(existing)}</b> ключей."
+    )
+    logger.info(f"🗝️ Админ {message.from_user.id} добавил {len(new_keys)} ключей")
 
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message):
     if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ Нет прав.")
+        await message.answer("⛔ У вас нет доступа к этой команде.")
         return
+
     keys_left = get_keys_count()
     stats = get_stats()
     await message.answer(
-        f"📊 <b>Статистика:</b>\n\n"
-        f"🔑 Осталось: <b>{keys_left}</b>\n"
-        f"👤 Выдано: <b>{stats['total_users']}</b>"
+        f"📊 <b>Статистика бота:</b>\n\n"
+        f"🔑 Осталось ключей: <b>{keys_left}</b>\n"
+        f"👤 Ключей выдано: <b>{stats['total_users']}</b>"
     )
 
 
 @router.message(Command("delkey"))
 async def cmd_del_key(message: Message):
     if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ Нет прав.")
+        await message.answer("⛔ У вас нет доступа к этой команде.")
         return
+
     key_to_del = message.text.replace("/delkey", "").strip()
     if not key_to_del:
         await message.answer("Использование: <code>/delkey XXXX-XXXX-XXXX</code>")
         return
+
     keys = load_keys()
     if key_to_del in keys:
         keys.remove(key_to_del)
         save_keys(keys)
-        await message.answer(f"✅ Ключ <code>{key_to_del}</code> удалён.")
+        await message.answer(f"✅ Ключ <code>{key_to_del}</code> удалён из базы.")
     else:
-        await message.answer(f"❌ Ключ не найден.")
+        await message.answer(f"❌ Ключ <code>{key_to_del}</code> не найден в базе.")
 
 
 @router.message(Command("listkeys"))
 async def cmd_list_keys(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return
+
     keys = load_keys()
     if not keys:
-        await message.answer("📭 Ключей нет.")
+        await message.answer("📭 В настоящее время база ключей пуста.")
         return
+
     text = "🔑 <b>Доступные ключи:</b>\n\n"
     for i, k in enumerate(keys, 1):
         text += f"{i}. <code>{k}</code>\n"
+
     if len(text) > 4000:
         for part in [text[i:i+4000] for i in range(0, len(text), 4000)]:
             await message.answer(part)
@@ -349,14 +394,16 @@ async def cmd_list_keys(message: Message):
 async def cmd_set_channel(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return
+
     new_channel = message.text.replace("/setchannel", "").strip()
     if not new_channel:
         await message.answer("Использование: <code>/setchannel @username</code>")
         return
+
     global CHANNEL_USERNAME
     CHANNEL_USERNAME = new_channel if new_channel.startswith("@") else f"@{new_channel}"
     save_config({"channel": CHANNEL_USERNAME})
-    await message.answer(f"✅ Канал: <code>{CHANNEL_USERNAME}</code>")
+    await message.answer(f"✅ Канал для проверки обновлён: <code>{CHANNEL_USERNAME}</code>")
 
 
 # --- Catch-all: ПОСЛЕДНИМ ---
@@ -368,7 +415,7 @@ async def catch_all_message(message: Message):
 @router.callback_query()
 async def catch_all_callback(callback: CallbackQuery):
     logger.info(f"⚠️ Необработанный callback: {callback.data}")
-    await callback.answer("❓ Неизвестное действие", show_alert=True)
+    await callback.answer("Извините, эта функция сейчас недоступна.", show_alert=True)
 
 
 # ======================== КОНФИГ ========================
@@ -381,9 +428,11 @@ def load_config() -> dict:
             pass
     return {}
 
+
 def save_config(cfg: dict):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
+
 
 saved_cfg = load_config()
 if "channel" in saved_cfg:
