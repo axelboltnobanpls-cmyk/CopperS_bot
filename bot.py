@@ -1,0 +1,459 @@
+import json
+import os
+import sqlite3
+import logging
+
+from aiogram import Bot, Dispatcher, Router, F
+from aiogram.types import (
+    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+)
+from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.storage.memory import MemoryStorage
+
+# ======================== ПУТИ ========================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+KEYS_FILE = os.path.join(BASE_DIR, "keys.json")
+DATABASE_FILE = os.path.join(BASE_DIR, "users.db")
+CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+
+# ======================== НАСТРОЙКИ ========================
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8675981214:AAHkjjcFAhSTisGVF15O7MR3Be7hUhVyasg")
+CHANNEL_USERNAME = "@copperS_shop"
+CHANNEL_LINK = "https://t.me/copperS_shop"
+GGSEL_LINK = "https://ggsel.net/sellers/132805517"
+ADMIN_IDS = [7079908197, 6797520714]
+
+INSTRUCTION_TEXT = (
+    "📖 <b>Инструкция по активации ключа в Steam:</b>\n\n"
+    "1️⃣ Откройте клиент <b>Steam</b> и войдите в свой аккаунт.\n"
+    "2️⃣ Нажмите на <b>имя вашего профиля</b> в правом верхнем углу.\n"
+    "3️⃣ Выберите <b>«Активация продукта»</b>.\n"
+    "4️⃣ Нажмите <b>«Далее»</b>, поставьте галочку → <b>«Я согласен»</b>.\n"
+    "5️⃣ Введите полученный ключ в пустое поле.\n"
+    "6️⃣ Нажмите <b>«Далее»</b> и следуйте инструкциям на экране.\n\n"
+    "🎮 После активации игра появится в вашей библиотеке!\n\n"
+    f"💎 Наш магазин: <a href=\"{GGSEL_LINK}\">ggsel.net</a>\n\n"
+    "💡 Если у вас возникнут вопросы — напишите нам в канал @copperS_shop"
+)
+# ==========================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
+router = Router()
+
+
+# ======================== БАЗА ДАННЫХ ========================
+def init_db():
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            received_key TEXT,
+            received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+    logger.info(f"✅ База данных OK: {DATABASE_FILE}")
+
+
+def user_exists(user_id: int) -> bool:
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result is not None
+
+
+def save_user(user_id: int, username: str, first_name: str, key: str):
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO users (user_id, username, first_name, received_key) VALUES (?, ?, ?, ?)",
+        (user_id, username, first_name, key)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_stats() -> dict:
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total = cursor.fetchone()[0]
+    conn.close()
+    return {"total_users": total}
+
+
+# ======================== РАБОТА С КЛЮЧАМИ ========================
+def ensure_keys_file():
+    if not os.path.exists(KEYS_FILE):
+        logger.warning(f"⚠️ Файл {KEYS_FILE} не найден! Создаём пустой...")
+        save_keys([])
+
+
+def load_keys() -> list:
+    ensure_keys_file()
+    try:
+        with open(KEYS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            keys = data.get("keys", [])
+            return keys
+    except Exception as e:
+        logger.error(f"Ошибка чтения keys.json: {e}")
+        save_keys([])
+        return []
+
+
+def save_keys(keys: list):
+    with open(KEYS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"keys": keys}, f, ensure_ascii=False, indent=2)
+
+
+def get_next_key() -> str | None:
+    keys = load_keys()
+    if not keys:
+        return None
+    key = keys.pop(0)
+    save_keys(keys)
+    logger.info(f"🔑 ВЫДАН: {key[:8]}... (осталось {len(keys)})")
+    return key
+
+
+def get_keys_count() -> int:
+    return len(load_keys())
+
+
+# ======================== КЛАВИАТУРЫ ========================
+def get_channel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Перейти в канал", url=CHANNEL_LINK)],
+        [InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_sub")]
+    ])
+
+
+def get_main_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Наш канал", url=CHANNEL_LINK)],
+        [InlineKeyboardButton(text="💎 Наш магазин", url=GGSEL_LINK)]
+    ])
+
+
+# ======================== ПРОВЕРКА ПОДПИСКИ ========================
+async def check_subscription(user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(
+            chat_id=CHANNEL_USERNAME,
+            user_id=user_id
+        )
+        return member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        logger.error(f"Ошибка проверки подписки для {user_id}: {e}")
+        return False
+
+
+# ======================== ОБРАБОТЧИКИ ========================
+
+@router.message(CommandStart())
+async def cmd_start(message: Message):
+    uid = message.from_user.id
+    first = message.from_user.first_name or "Друг"
+    logger.info(f"👋 /start от {uid} ({first})")
+
+    count = get_keys_count()
+
+    if count == 0:
+        await message.answer(
+            f"👋 <b>Здравствуйте, {first}!</b>\n\n"
+            "😔 К сожалению, в данный момент все ключи временно разобраны.\n"
+            "Не переживайте — мы уже работаем над пополнением!\n\n"
+            "💛 Советуем подписаться на канал, чтобы не пропустить обновления:\n\n"
+            f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>",
+            reply_markup=get_channel_keyboard(),
+            disable_web_page_preview=True
+        )
+        return
+
+    if user_exists(uid):
+        await message.answer(
+            f"👋 <b>С возвращением, {first}!</b>\n\n"
+            "Вы уже получали ключ в рамках данной акции — "
+            "к сожалению, повторная выдача не предусмотрена.\n\n"
+            "💛 Порекомендуйте бота друзьям — возможно, им повезёт! 😉",
+            reply_markup=get_main_keyboard()
+        )
+        return
+
+    is_subscribed = await check_subscription(uid)
+
+    if not is_subscribed:
+        await message.answer(
+            f"👋 <b>Здравствуйте, {first}!</b>\n\n"
+            "🎁 Мы будем рады подарить вам бесплатный ключ!\n"
+            "Для этого подпишитесь на наш канал:\n\n"
+            f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>\n\n"
+            "После подписки нажмите кнопку <b>«Проверить подписку»</b> 👇",
+            reply_markup=get_channel_keyboard(),
+            disable_web_page_preview=True
+        )
+    else:
+        key = get_next_key()
+        if key:
+            save_user(
+                user_id=uid,
+                username=message.from_user.username or "N/A",
+                first_name=first,
+                key=key
+            )
+            await message.answer(
+                f"🎉 <b>Поздравляем, {first}!</b>\n\n"
+                f"Вот ваш персональный ключ:\n<code>{key}</code>\n\n"
+                f"📖 <b>Инструкция по активации:</b>\n\n{INSTRUCTION_TEXT}\n\n"
+                "🔒 Обратите внимание: ключ одноразовый и привязан только к вам.\n"
+                "Приятной игры! 🎮",
+                reply_markup=get_main_keyboard()
+            )
+        else:
+            await message.answer(
+                f"👋 <b>{first}</b>, к сожалению, ключи на данный момент "
+                "закончились.\n\n"
+                "Мы уже работаем над этим — загляните в канал, чтобы узнать "
+                "о новых партиях первым:\n\n"
+                f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>",
+                reply_markup=get_channel_keyboard(),
+                disable_web_page_preview=True
+            )
+
+
+@router.callback_query(F.data == "check_sub")
+async def check_sub_callback(callback: CallbackQuery):
+    await callback.answer()
+    uid = callback.from_user.id
+    first = callback.from_user.first_name or "Друг"
+    logger.info(f"🔍 Проверка подписки: {uid}")
+
+    if get_keys_count() == 0:
+        await callback.message.edit_text(
+            f"👋 <b>{first}</b>, ключи на данный момент временно отсутствуют.\n\n"
+            "Мы уже работаем над пополнением — следите за обновлениями в канале!\n\n"
+            f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>",
+            reply_markup=None,
+            disable_web_page_preview=True
+        )
+        return
+
+    is_subscribed = await check_subscription(uid)
+
+    if not is_subscribed:
+        await callback.message.edit_text(
+            f"👋 <b>{first}</b>, к сожалению, мы пока не видим вашу подписку.\n\n"
+            f"📢 Пожалуйста, подпишитесь на канал "
+            f"<a href=\"{CHANNEL_LINK}\">copperS_shop</a>, "
+            "а затем нажмите кнопку <b>«Проверить подписку»</b> ещё раз.",
+            reply_markup=get_channel_keyboard(),
+            disable_web_page_preview=True
+        )
+    elif user_exists(uid):
+        await callback.message.edit_text(
+            f"👋 <b>{first}</b>, вы уже получали ключ в рамках данной акции.\n\n"
+            "Порекомендуйте бота друзьям — возможно, им тоже повезёт! 😊"
+        )
+    else:
+        key = get_next_key()
+        if key:
+            save_user(
+                user_id=uid,
+                username=callback.from_user.username or "N/A",
+                first_name=first,
+                key=key
+            )
+            await callback.message.edit_text(
+                f"🎉 <b>Поздравляем, {first}!</b>\n\n"
+                f"Вот ваш персональный ключ:\n<code>{key}</code>\n\n"
+                f"📖 <b>Инструкция по активации:</b>\n\n{INSTRUCTION_TEXT}\n\n"
+                "🔒 Ключ одноразовый и привязан только к вам.\n"
+                "Приятной игры! 🎮",
+                reply_markup=get_main_keyboard()
+            )
+        else:
+            await callback.message.edit_text(
+                f"👋 <b>{first}</b>, к сожалению, ключи закончились.\n"
+                "Мы уже работаем над этим — загляните в канал для обновлений!\n\n"
+                f"📢 <a href=\"{CHANNEL_LINK}\">copperS_shop</a>",
+                reply_markup=get_main_keyboard(),
+                disable_web_page_preview=True
+            )
+
+
+# --- Админские команды ---
+@router.message(Command("addkey"))
+async def cmd_add_key(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ У вас нет доступа к этой команде.")
+        return
+
+    text = message.text.replace("/addkey", "").strip()
+    if not text:
+        await message.answer(
+            "📝 <b>Формат добавления ключей:</b>\n\n"
+            "<code>/addkey\nXXXX-XXXX-XXXX\nYYYY-YYYY-YYYY</code>\n\n"
+            "Каждый ключ с новой строки."
+        )
+        return
+
+    new_keys = [k.strip() for k in text.split("\n") if k.strip()]
+    if not new_keys:
+        await message.answer("❌ Не удалось распознать ключи.")
+        return
+
+    existing = load_keys()
+    existing.extend(new_keys)
+    save_keys(existing)
+    await message.answer(
+        f"✅ <b>{len(new_keys)}</b> ключей успешно добавлено.\n"
+        f"📊 Всего в базе: <b>{len(existing)}</b> ключей."
+    )
+    logger.info(f"🗝️ Админ {message.from_user.id} добавил {len(new_keys)} ключей")
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ У вас нет доступа к этой команде.")
+        return
+
+    keys_left = get_keys_count()
+    stats = get_stats()
+    await message.answer(
+        f"📊 <b>Статистика бота:</b>\n\n"
+        f"🔑 Осталось ключей: <b>{keys_left}</b>\n"
+        f"👤 Ключей выдано: <b>{stats['total_users']}</b>"
+    )
+
+
+@router.message(Command("delkey"))
+async def cmd_del_key(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ У вас нет доступа к этой команде.")
+        return
+
+    key_to_del = message.text.replace("/delkey", "").strip()
+    if not key_to_del:
+        await message.answer("Использование: <code>/delkey XXXX-XXXX-XXXX</code>")
+        return
+
+    keys = load_keys()
+    if key_to_del in keys:
+        keys.remove(key_to_del)
+        save_keys(keys)
+        await message.answer(f"✅ Ключ <code>{key_to_del}</code> удалён из базы.")
+    else:
+        await message.answer(f"❌ Ключ <code>{key_to_del}</code> не найден в базе.")
+
+
+@router.message(Command("listkeys"))
+async def cmd_list_keys(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    keys = load_keys()
+    if not keys:
+        await message.answer("📭 В настоящее время база ключей пуста.")
+        return
+
+    text = "🔑 <b>Доступные ключи:</b>\n\n"
+    for i, k in enumerate(keys, 1):
+        text += f"{i}. <code>{k}</code>\n"
+
+    if len(text) > 4000:
+        for part in [text[i:i+4000] for i in range(0, len(text), 4000)]:
+            await message.answer(part)
+    else:
+        await message.answer(text)
+
+
+@router.message(Command("setchannel"))
+async def cmd_set_channel(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+
+    new_channel = message.text.replace("/setchannel", "").strip()
+    if not new_channel:
+        await message.answer("Использование: <code>/setchannel @username</code>")
+        return
+
+    global CHANNEL_USERNAME
+    CHANNEL_USERNAME = new_channel if new_channel.startswith("@") else f"@{new_channel}"
+    save_config({"channel": CHANNEL_USERNAME})
+    await message.answer(f"✅ Канал для проверки обновлён: <code>{CHANNEL_USERNAME}</code>")
+
+
+# --- Catch-all: ПОСЛЕДНИМ ---
+@router.message()
+async def catch_all_message(message: Message):
+    logger.info(f"📩 Необработанное: {message.from_user.id}: {message.text}")
+
+
+@router.callback_query()
+async def catch_all_callback(callback: CallbackQuery):
+    logger.info(f"⚠️ Необработанный callback: {callback.data}")
+    await callback.answer("Извините, эта функция сейчас недоступна.", show_alert=True)
+
+
+# ======================== КОНФИГ ========================
+def load_config() -> dict:
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+
+def save_config(cfg: dict):
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
+saved_cfg = load_config()
+if "channel" in saved_cfg:
+    CHANNEL_USERNAME = saved_cfg["channel"]
+
+
+# ======================== ЗАПУСК ========================
+async def main():
+    init_db()
+    ensure_keys_file()
+    logger.info("=" * 50)
+    logger.info("🚀 Бот запущен!")
+    logger.info(f"📢 Канал: {CHANNEL_USERNAME}")
+    logger.info(f"🔑 Ключей: {get_keys_count()}")
+    logger.info(f"🗄️ keys.json: {KEYS_FILE}")
+    logger.info(f"🗄️ users.db: {DATABASE_FILE}")
+    logger.info("=" * 50)
+    dp.include_router(router)
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
