@@ -64,6 +64,18 @@ def get_total_users() -> int:
         return 0
 
 
+def get_keys_issued() -> int:
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users WHERE received_key IS NOT NULL")
+        issued = cursor.fetchone()[0]
+        conn.close()
+        return issued
+    except Exception:
+        return 0
+
+
 # ======================== ОБРАБОТЧИКИ ========================
 
 # --- /start в режиме техобслуживания ---
@@ -110,11 +122,13 @@ async def admin_stats(message: Message):
 
     keys = load_keys()
     total_users = get_total_users()
+    keys_issued = get_keys_issued()
 
     text = (
         f"📊 <b>Статистика (режим обслуживания):</b>\n\n"
-        f"🔑 Ключей осталось: <b>{len(keys)}</b>\n"
-        f"👤 Ключей выдано: <b>{total_users}</b>"
+        f"👥 Нажали /start: <b>{total_users}</b>\n"
+        f"🔑 Ключей выдано: <b>{keys_issued}</b>\n"
+        f"🔑 Ключей осталось: <b>{len(keys)}</b>"
     )
     await message.answer(text)
 
@@ -204,6 +218,8 @@ async def main():
     logger.info("=" * 50)
     logger.info("🔧 БОТ В РЕЖИМЕ ТЕХОБСЛУЖИВАНИЯ")
     logger.info(f"📢 Канал: {CHANNEL_USERNAME}")
+    logger.info(f"👥 Нажали /start: {get_total_users()}")
+    logger.info(f"🔑 Ключей выдано: {get_keys_issued()}")
     logger.info(f"🔑 Ключей в базе: {get_keys_count()}")
     logger.info("=" * 50)
 

@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import logging
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import (
@@ -74,21 +75,32 @@ def init_db():
     logger.info(f"✅ База данных OK: {DATABASE_FILE}")
 
 
-def user_exists(user_id: int) -> bool:
-    conn = sqlite3.connect(DATABASE_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
-    conn.close()
-    return result is not None
-
-
-def save_user(user_id: int, username: str, first_name: str, key: str):
+def register_user(user_id: int, username: str, first_name: str):
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO users (user_id, username, first_name, received_key) VALUES (?, ?, ?, ?)",
-        (user_id, username, first_name, key)
+        "INSERT OR IGNORE INTO users (user_id, username, first_name, received_key) VALUES (?, ?, ?, NULL)",
+        (user_id, username, first_name)
+    )
+    conn.commit()
+    conn.close()
+
+
+def has_received_key(user_id: int) -> bool:
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT received_key FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result is not None and result[0] is not None
+
+
+def assign_key(user_id: int, key: str):
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET received_key = ?, received_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+        (key, user_id)
     )
     conn.commit()
     conn.close()
@@ -99,8 +111,10 @@ def get_stats() -> dict:
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM users")
     total = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM users WHERE received_key IS NOT NULL")
+    issued = cursor.fetchone()[0]
     conn.close()
-    return {"total_users": total}
+    return {"total_users": total, "keys_issued": issued}
 
 
 # ======================== РАБОТА С КЛЮЧАМИ ========================
@@ -176,7 +190,10 @@ async def check_subscription(user_id: int) -> bool:
 async def cmd_start(message: Message):
     uid = message.from_user.id
     first = message.from_user.first_name or "Друг"
+    username = message.from_user.username or "N/A"
     logger.info(f"👋 /start от {uid} ({first})")
+
+    register_user(uid, username, first)
 
     count = get_keys_count()
 
@@ -192,7 +209,7 @@ async def cmd_start(message: Message):
         )
         return
 
-    if user_exists(uid):
+    if has_received_key(uid):
         await message.answer(
             f"👋 <b>С возвращением, {first}!</b>\n\n"
             "Вы уже получали ключ в рамках данной акции — "
@@ -217,12 +234,7 @@ async def cmd_start(message: Message):
     else:
         key = get_next_key()
         if key:
-            save_user(
-                user_id=uid,
-                username=message.from_user.username or "N/A",
-                first_name=first,
-                key=key
-            )
+            assign_key(uid, key)
             await message.answer(
                 f"🎉 <b>Поздравляем, {first}!</b>\n\n"
                 f"Вот ваш персональный ключ:\n<code>{key}</code>\n\n"
@@ -248,7 +260,10 @@ async def check_sub_callback(callback: CallbackQuery):
     await callback.answer()
     uid = callback.from_user.id
     first = callback.from_user.first_name or "Друг"
+    username = callback.from_user.username or "N/A"
     logger.info(f"🔍 Проверка подписки: {uid}")
+
+    register_user(uid, username, first)
 
     if get_keys_count() == 0:
         await callback.message.edit_text(
@@ -271,7 +286,7 @@ async def check_sub_callback(callback: CallbackQuery):
             reply_markup=get_channel_keyboard(),
             disable_web_page_preview=True
         )
-    elif user_exists(uid):
+    elif has_received_key(uid):
         await callback.message.edit_text(
             f"👋 <b>{first}</b>, вы уже получали ключ в рамках данной акции.\n\n"
             "Порекомендуйте бота друзьям — возможно, им тоже повезёт! 😊"
@@ -279,12 +294,7 @@ async def check_sub_callback(callback: CallbackQuery):
     else:
         key = get_next_key()
         if key:
-            save_user(
-                user_id=uid,
-                username=callback.from_user.username or "N/A",
-                first_name=first,
-                key=key
-            )
+            assign_key(uid, key)
             await callback.message.edit_text(
                 f"🎉 <b>Поздравляем, {first}!</b>\n\n"
                 f"Вот ваш персональный ключ:\n<code>{key}</code>\n\n"
@@ -344,8 +354,9 @@ async def cmd_stats(message: Message):
     stats = get_stats()
     await message.answer(
         f"📊 <b>Статистика бота:</b>\n\n"
-        f"🔑 Осталось ключей: <b>{keys_left}</b>\n"
-        f"👤 Ключей выдано: <b>{stats['total_users']}</b>"
+        f"👥 Нажали /start: <b>{stats['total_users']}</b>\n"
+        f"🔑 Ключей выдано: <b>{stats['keys_issued']}</b>\n"
+        f"🔑 Осталось ключей: <b>{keys_left}</b>"
     )
 
 

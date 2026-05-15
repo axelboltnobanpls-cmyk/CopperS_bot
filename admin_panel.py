@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import logging
+from datetime import datetime
 
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import (
@@ -21,7 +22,7 @@ DATABASE_FILE = os.path.join(BASE_DIR, "users.db")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 # ======================== НАСТРОЙКИ ========================
-BOT_TOKEN = "8601852006:AAFZEsIP6WgbfwDbbW4LShK7oytq6E8neOY"
+BOT_TOKEN = os.environ.get("ADMIN_TOKEN", "8601852006:AAFZEsIP6WgbfwDbbW4LShK7oytq6E8neOY")
 ADMIN_IDS = [7079908197, 6797520714]
 # ==========================================================
 
@@ -70,11 +71,35 @@ def get_total_users() -> int:
         return 0
 
 
+def get_keys_issued() -> int:
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users WHERE received_key IS NOT NULL")
+        issued = cursor.fetchone()[0]
+        conn.close()
+        return issued
+    except Exception:
+        return 0
+
+
 def get_all_users() -> list:
     try:
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
-        cursor.execute("SELECT user_id, username, first_name, received_key FROM users")
+        cursor.execute("SELECT user_id, username, first_name, received_key, received_at FROM users ORDER BY received_at DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
+def get_users_with_keys() -> list:
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id, username, first_name, received_key, received_at FROM users WHERE received_key IS NOT NULL ORDER BY received_at DESC")
         rows = cursor.fetchall()
         conn.close()
         return rows
@@ -131,26 +156,14 @@ def load_config() -> dict:
     return {}
 
 
-def export_keys_to_text() -> str:
-    keys = load_keys()
-    if not keys:
-        return "📭 Ключей нет в базе."
-    text = "🔑 <b>Все ключи:</b>\n\n"
-    for i, k in enumerate(keys, 1):
-        text += f"<code>{k}</code>\n"
-    return text
-
-
-def export_users_to_text() -> str:
-    users = get_all_users()
-    if not users:
-        return "👤 Пользователей нет в базе."
-    text = "👥 <b>Все пользователи:</b>\n\n"
-    for uid, uname, fname, key in users:
-        u = f"@{uname}" if uname and uname != "N/A" else fname
-        k = key if key and key != "N/A" else "—"
-        text += f"👤 {u} | <code>{uid}</code> | Ключ: <code>{k}</code>\n"
-    return text
+def format_date(dt_str: str) -> str:
+    if not dt_str:
+        return "—"
+    try:
+        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+        return dt.strftime("%d.%m.%Y %H:%M")
+    except:
+        return dt_str
 
 
 # ======================== СОСТОЯНИЯ FSM ========================
@@ -228,7 +241,6 @@ async def admin_add_keys_process(message: Message, state: FSMContext):
         await message.answer("❌ Введите ключи!")
         return
 
-    # Поддержка и построчный ввод, и через пробел
     if "\n" in text:
         new_keys = [k.strip() for k in text.split("\n") if k.strip()]
     else:
@@ -309,11 +321,13 @@ async def admin_list_keys(callback: CallbackQuery):
 async def admin_stats(callback: CallbackQuery):
     keys = load_keys()
     total_users = get_total_users()
+    keys_issued = get_keys_issued()
 
     text = (
         "📊 <b>Статистика бота:</b>\n\n"
-        f"🔑 Ключей в базе: <b>{len(keys)}</b>\n"
-        f"👤 Пользователей получило ключ: <b>{total_users}</b>"
+        f"👥 Нажали /start: <b>{total_users}</b>\n"
+        f"🔑 Ключей выдано: <b>{keys_issued}</b>\n"
+        f"🔑 Ключей в базе: <b>{len(keys)}</b>"
     )
     await callback.message.edit_text(text, reply_markup=get_back_keyboard())
 
@@ -329,11 +343,17 @@ async def admin_users(callback: CallbackQuery):
         )
         return
 
-    text = f"👥 <b>Пользователи ({len(users)} чел.):</b>\n\n"
-    for uid, uname, fname, key in users[:50]:  # Показываем первых 50
+    text = f"👥 <b>Все пользователи ({len(users)} чел.):</b>\n\n"
+
+    for uid, uname, fname, key, dt in users[:50]:
         u = f"@{uname}" if uname and uname != "N/A" else (fname or "N/A")
-        k = f"<code>{key}</code>" if key and key != "N/A" else "—"
-        text += f"👤 {u} — {k}\n"
+        date_str = format_date(dt)
+
+        if key and key != "N/A":
+            key_short = key[:12] + "..." if len(key) > 12 else key
+            text += f"🟢 {u} | ID: <code>{uid}</code>\n   Ключ: <code>{key_short}</code> | 📅 {date_str}\n"
+        else:
+            text += f"🔴 {u} | ID: <code>{uid}</code>\n   Ключ: ❌ Не получен | 📅 {date_str}\n"
 
     if len(users) > 50:
         text += f"\n... и ещё {len(users) - 50} чел."
@@ -378,7 +398,7 @@ async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AdminStates.waiting_broadcast)
     await callback.message.edit_text(
         "📢 <b>Рассылка</b>\n\n"
-        "Введите текст сообщения, которое отправится всем пользователям:\n\n"
+        "Введите текст сообщения. Отправится только тем, кто <b>получил ключ</b> (активные пользователи).\n\n"
         "Например:\n"
         "<code>🔔 Обновление! Скоро новые ключи!</code>",
         reply_markup=get_back_keyboard()
@@ -392,16 +412,16 @@ async def admin_broadcast_process(message: Message, state: FSMContext):
         await message.answer("❌ Введите текст сообщения!")
         return
 
-    users = get_all_users()
+    users = get_users_with_keys()
     if not users:
         await state.clear()
-        await message.answer("👤 Нет пользователей для рассылки.")
+        await message.answer("👤 Нет пользователей с ключами для рассылки.")
         return
 
     success = 0
     failed = 0
 
-    for uid, _, _, _ in users:
+    for uid, _, _, _, _ in users:
         try:
             await bot.send_message(
                 chat_id=uid,
@@ -417,7 +437,7 @@ async def admin_broadcast_process(message: Message, state: FSMContext):
         f"📢 <b>Рассылка завершена!</b>\n\n"
         f"✅ Отправлено: <b>{success}</b>\n"
         f"❌ Ошибок: <b>{failed}</b>\n"
-        f"👤 Всего пользователей: <b>{len(users)}</b>",
+        f"👤 Всего получателей (с ключами): <b>{len(users)}</b>",
         reply_markup=get_main_menu_keyboard()
     )
 
@@ -440,6 +460,7 @@ async def main():
     logger.info("=" * 50)
     logger.info("🔐 АДМИН-ПАНЕЛЬ ЗАПУЩЕНА")
     logger.info(f"👥 Всего пользователей: {get_total_users()}")
+    logger.info(f"🔑 Ключей выдано: {get_keys_issued()}")
     logger.info(f"🔑 Ключей в базе: {len(load_keys())}")
     logger.info("=" * 50)
 
